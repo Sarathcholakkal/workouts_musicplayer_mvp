@@ -2,22 +2,23 @@ import 'package:flutter/material.dart';
 
 import 'package:just_audio/just_audio.dart';
 import 'package:on_audio_query/on_audio_query.dart';
+// ! (Red)**Use for warnings or important notes.
+// *(Green)** Use for highlighting information.
+// ? (Purple)** Use for questions or clarifications.
+//(Grey)** Normal comments without specific styling.
 
 class PlaySong extends StatefulWidget {
   final List<SongModel> songs;
   final int index;
 
   PlaySong({super.key, required this.songs, required this.index});
-  // final songModelList;
-  // int idx;
-  // PlaySong({super.key, required this.songModelList, required this.idx});
-
   @override
   State<PlaySong> createState() => _HomeState();
 }
 
 class _HomeState extends State<PlaySong> {
   final player = AudioPlayer();
+
   //==================
 
   //=================
@@ -43,27 +44,20 @@ class _HomeState extends State<PlaySong> {
 
   //====================
 
-  // Future<void> _playSong(SongModel song) async {
-  //   try {
-  //     await player.setAudioSource(AudioSource.uri(Uri.parse(song.uri!)));
-  //     player.play();
-  //   } catch (e) {
-  //     print("Error playing song: $e");
-  //   }
-  // }
-
   //=============================
   Future<void> _playSongs(List<SongModel> songs) async {
     try {
       // Create a list of AudioSource from the songs list
       final playlist = ConcatenatingAudioSource(
         children: songs.map((song) {
-          return AudioSource.uri(Uri.parse(song.uri!));
+          return AudioSource.uri(
+            Uri.parse(song.uri!),
+          );
         }).toList(),
       );
 
       // Set the audio source to the playlist
-      await player.setAudioSource(playlist);
+      await player.setAudioSource(playlist, initialIndex: widget.index);
 
       // Start playing
       player.play();
@@ -72,33 +66,27 @@ class _HomeState extends State<PlaySong> {
     }
   }
 
-  //==================
-  Duration position = Duration.zero;
-  Duration duration = Duration.zero;
+  final ValueNotifier<Duration> position = ValueNotifier(Duration.zero);
+  final ValueNotifier<Duration> duration = ValueNotifier(Duration.zero);
+  final ValueNotifier<bool> isPlaying = ValueNotifier(false);
+
   @override
   void initState() {
     _playSongs(widget.songs);
-    // player.setUrl(
-    //     "https://commondatastorage.googleapis.com/codeskulptor-demos/DDR_assets/Sevish_-__nbsp_.mp3");
     player.positionStream.listen((p) {
-      setState(() {
-        position = p;
-      });
+      position.value = p;
     });
 
     player.durationStream.listen((d) {
-      setState(() {
-        duration = d!;
-      });
+      duration.value = d!;
     });
 
     player.playerStateStream.listen((state) {
+      isPlaying.value = state.playing;
       if (state.processingState == ProcessingState.completed) {
-        setState(() {
-          position = Duration.zero;
-        });
+        position.value = Duration.zero;
         player.pause();
-        player.seek(position);
+        player.seek(position.value);
       }
     });
     super.initState();
@@ -113,16 +101,59 @@ class _HomeState extends State<PlaySong> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(formatDuration(position)),
-            Slider(
-                min: 0.0,
-                max: duration.inSeconds.toDouble(),
-                value: position.inSeconds.toDouble(),
-                onChanged: handleSeek),
-            Text(formatDuration(duration)),
-            IconButton(
-              onPressed: hadlePlayPause,
-              icon: Icon(player.playing ? Icons.pause : Icons.play_arrow),
+            ValueListenableBuilder<Duration>(
+              valueListenable: position,
+              builder: (context, value, child) {
+                return Text(formatDuration(value));
+              },
+            ),
+            ValueListenableBuilder<Duration>(
+              valueListenable: duration,
+              builder: (context, totalDuration, child) {
+                return ValueListenableBuilder<Duration>(
+                  valueListenable: position,
+                  builder: (context, currentPosition, child) {
+                    return Slider(
+                      min: 0.0,
+                      max: totalDuration.inSeconds.toDouble(),
+                      value: currentPosition.inSeconds
+                          .clamp(0, totalDuration.inSeconds)
+                          .toDouble(),
+                      onChanged: handleSeek,
+                    );
+                  },
+                );
+              },
+            ),
+            ValueListenableBuilder<Duration>(
+              valueListenable: duration,
+              builder: (context, value, child) {
+                return Text(formatDuration(value));
+              },
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                IconButton(
+                    onPressed: () {
+                      player.seekToPrevious();
+                    },
+                    icon: const Icon(Icons.skip_previous)),
+                ValueListenableBuilder<bool>(
+                  valueListenable: isPlaying,
+                  builder: (context, playing, child) {
+                    return IconButton(
+                      onPressed: hadlePlayPause,
+                      icon: Icon(playing ? Icons.pause : Icons.play_arrow),
+                    );
+                  },
+                ),
+                IconButton(
+                    onPressed: () {
+                      player.seekToNext();
+                    },
+                    icon: const Icon(Icons.skip_next)),
+              ],
             )
           ],
         ),
